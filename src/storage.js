@@ -22,15 +22,30 @@ export const storage = {
   },
 
   async set(key, value) {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/${TABLE}`,
+    // Try PATCH (update existing row) first
+    const patchRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${encodeURIComponent(key)}`,
       {
-        method: "POST",
-        headers: { ...headers, "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ key, value }),
+        method: "PATCH",
+        headers: { ...headers, "Prefer": "return=representation" },
+        body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
       }
     );
-    if (!res.ok) throw new Error(await res.text());
+    if (!patchRes.ok) throw new Error(await patchRes.text());
+    const updated = await patchRes.json();
+
+    if (updated.length === 0) {
+      // No existing row — INSERT
+      const postRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/${TABLE}`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ key, value }),
+        }
+      );
+      if (!postRes.ok) throw new Error(await postRes.text());
+    }
     return { key, value };
   },
 
